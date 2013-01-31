@@ -175,16 +175,30 @@ class jsonrpc2 {
 		// if the method requested is available
 		if ( isset( $this->method_map[$request->method] ) ) {
 			try {
-				// reflect the global function
-				$reflection = new ReflectionFunction ( $this->method_map[$request->method] );
+				// reflect the global function or method
+				$name = $this->method_map[$request->method];
+				if ( is_array( $name ) ) {
+					$reflection = new ReflectionMethod ( $name[0], $name[1] );
+					$object = is_object( $name[0] ) ? $name[0] : null;
+				} elseif ( strpos( $name, '::' ) ) {
+					list( $class, $method ) = explode( '::', $name, 2 );
+					$reflection = new ReflectionMethod ( $class, $method );
+					$object = null;
+				} else {
+					$reflection = new ReflectionFunction ( $name );
+					$object = false;
+				}
 
 				// check the parameters in the reflection against what was sent in the request
 				$params = $this->checkParams( $reflection->getParameters(), $request->params );
 
+				if ( $object === false )
+					$result = $reflection->invokeArgs( $params );
+				else
+					$result = $reflection->invokeArgs( $object, $params );
+
 				// return the result as an invoked call
-				return (object) array(
-					'result' => $reflection->invokeArgs( $params ),
-				);
+				return (object) array( 'result' => $result );
 			} catch ( Exception $e ) {
 				// if anything abnormal happened, capture the error code thrown
 				$error = $e->getMessage();
